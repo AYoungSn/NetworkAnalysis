@@ -209,8 +209,6 @@ try_reconnect:
 				goto try_reconnect;
             }
             
-            /*printf("Received (%d bytes): '%.*s’”,
-                    bytes_received, bytes_received, p);*/
             p += bytes_received;
             *p = 0;
             if (!body && (body = strstr(response, "\r\n\r\n"))) {

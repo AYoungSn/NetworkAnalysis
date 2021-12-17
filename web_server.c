@@ -296,20 +296,8 @@ void serve_resource_p(struct client_info *client, const char *path, char *data) 
 	drop_client(client);
 }
 
-int server;
-
-void signal_f(int signo)
-{
-	if (signo == SIGINT){
-		close(server);
-		exit(1);
-	}
-}
-
 int main() {
-	server = create_socket("127.0.0.1", "8080");
-
-	signal(SIGINT, signal_f);
+	int server = create_socket("127.0.0.1", "8080");
 
 	while (1) {
 		fd_set reads;
