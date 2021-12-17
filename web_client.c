@@ -70,6 +70,7 @@ FILE* open_cookie(char *hostname, char *port, char *option) {
 void send_request(int s, char *hostname, char *port, char *path, char *buf, int post) {
     char buffer[2048];
 	char cookie[BSIZE];
+	memset(cookie, 0, sizeof(cookie));
 	FILE* fp = open_cookie(hostname, port, "r");
 	if (post) {
 		sprintf(buffer, "POST /%s HTTP/1.1\r\n", path);
@@ -275,6 +276,7 @@ try_reconnect:
         } //if FDSET
 		if(FD_ISSET(0, &reads)) {
 			char read[4096];
+			memset(read, 0, sizeof(read));
 			if (fgets(read, 4096, stdin)) {
 				printf("Sending: %s", read);
 				send_request(server, hostname, port, path, read, 1);

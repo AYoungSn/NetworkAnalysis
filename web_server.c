@@ -228,8 +228,88 @@ void serve_resource(struct client_info *client, const char *path) {
 	drop_client(client);
 }
 
+void serve_resource_p(struct client_info *client, const char *path, char *data) {
+	printf("serve_resource %s\n", get_client_address(client));
+	if (strcmp(path, "/") == 0) path = "/index.html";
+	if (strlen(path) > 100) {
+		send_400(client);
+		return;
+	}
+	if (strstr(path, "..")) {
+		send_404(client);
+		return ;
+	}
+	
+	char full_path[128];
+	sprintf(full_path, "cookies/1");
+	FILE *fp = fopen(full_path, "r");
+	if (!fp) {
+		send_404(client);
+		return ;
+	}
+	// file size 계산
+	fseek(fp, 0L, SEEK_END);
+	size_t cl = ftell(fp);
+	rewind(fp);
+	// file type 얻기
+	const char *ct = get_content_type(full_path);
+	fclose(fp);
+#define BSIZE 1024
+	char buffer[BSIZE];
+	sprintf(buffer, "HTTP/1.1 200 OK\r\n");
+	send(client->socket, buffer, strlen(buffer), 0);
+
+	sprintf(buffer, "Connection: close\r\n");
+	send(client->socket, buffer, strlen(buffer), 0);
+
+	sprintf(buffer, "Content-Length: %zu\r\n", cl);
+	send(client->socket, buffer, strlen(buffer), 0);
+
+	sprintf(buffer, "Content-Type: %s\r\n", ct);
+	send(client->socket, buffer, strlen(buffer), 0);
+
+	FILE *cookie = fopen("cookies/1", "r");
+	if (!cookie) {
+		cookie = fopen("cookies/1", "a");
+		sprintf(buffer, "Set-Cookie: id=1\r\n");
+		send(client->socket, buffer, strlen(buffer), 0);
+	} else {
+		sprintf(buffer, "Cookie: id=1\r\n");
+		send(client->socket, buffer, strlen(buffer), 0);
+		fclose(cookie);
+		cookie = fopen("cookies/1", "a");
+	}
+	// fwrite(data, sizeof(data), 1, cookie);
+	// fwrite("\n", 1, 1, cookie);
+	fclose(cookie);
+
+	sprintf(buffer, "\r\n");
+	send(client->socket, buffer, strlen(buffer), 0);
+
+	fp = fopen(full_path, "r");
+	int r = fread(buffer, 1, BSIZE, fp);
+	while (r) {
+		send(client->socket, buffer, r, 0);
+		r = fread(buffer, 1, BSIZE, fp);
+	}
+	fclose(fp);
+	drop_client(client);
+}
+
+int server;
+
+void signal_f(int signo)
+{
+	if (signo == SIGINT){
+		close(server);
+		exit(1);
+	}
+}
+
 int main() {
-	int server = create_socket("localhost", "8080");
+	server = create_socket("127.0.0.1", "8080");
+
+	signal(SIGINT, signal_f);
 
 	while (1) {
 		fd_set reads;
@@ -249,6 +329,7 @@ int main() {
 		struct client_info *client = clients;
 		while (client) {
 			struct client_info *next = client->next;
+			memset(client->request, 0, MAX_REQUEST_SIZE);
 			if (FD_ISSET(client->socket, &reads)) {
 				if (MAX_REQUEST_SIZE == client->received) {
 					send_400(client);
@@ -272,9 +353,6 @@ int main() {
 					client->received += r;
 					client->request[client->received] = 0;
 					char *q = strstr(client->request, "\r\n\r\n");
-					printf("q: %s\n", q);
-					int comp = strncmp("GET /", client->request, 5);
-					printf("%d\n", comp);
 					if (q) {
 						if (strncmp("GET /", client->request, 5) == 0) {
 							char *path = client->request + 4;
@@ -289,14 +367,16 @@ int main() {
 							// post
 							char *path = client->request + 4;
 							char *end_path = strstr(path, " ");
-							// r = recv(client->socket,
-							// 	client->request + client->received,
-							// 	MAX_REQUEST_SIZE - client->received, 0);
 							if (!end_path) {
 								send_400(client);
 							} else {
 								*end_path = 0;
-								serve_resource(client, path);
+								char *data = q + 4;
+								// printf("recived data(%zu): |%s|\n", strlen(data), data);
+								FILE *fp = fopen("cookies/1", "a");
+								fwrite(data, strlen(data), 1, fp);
+								fclose(fp);
+								serve_resource_p(client, path, data);
 							}
 						}
 						else {
